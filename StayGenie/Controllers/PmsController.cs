@@ -24,6 +24,30 @@ public class PmsController(HotelDbContext db) : ControllerBase
     public async Task<IActionResult> List() =>
         Ok(await db.Reservations.Include(r => r.Room).OrderByDescending(r => r.Id).ToListAsync());
 
+    // Public: chatbot ek booking dekhta hai. Id AUR guest ka naam dono sahi hone chahiye.
+    [HttpGet("reservations/{id:int}")]
+    public async Task<IActionResult> GetOne(int id, [FromQuery] string guestName)
+    {
+        var res = await db.Reservations.Include(r => r.Room)
+            .FirstOrDefaultAsync(r => r.Id == id);
+
+        // Booking na mile ya naam na mile, dono surat mein same jawab
+        if (res is null ||
+            !string.Equals(res.GuestName.Trim(), guestName?.Trim(), StringComparison.OrdinalIgnoreCase))
+            return NotFound();
+
+        // Sirf zaroori cheezein wapas, poora object nahi
+        return Ok(new
+        {
+            res.Id,
+            roomNumber = res.Room?.RoomNumber,
+            res.GuestName,
+            res.CheckIn,
+            res.CheckOut,
+            res.TotalPrice
+        });
+    }
+
     // Public: chatbot (MCP tool) booking yahin se banata hai
     [HttpPost("reservations")]
     public async Task<IActionResult> Create(BookingRequest b)

@@ -39,20 +39,24 @@ public class ReservationTools(IHttpClientFactory httpFactory)
         var error = await res.Content.ReadAsStringAsync();
         return $"FAILED: {error}";
     }
-    [McpServerTool, Description("Looks up a reservation by its ID via the PMS Reservation API and returns its real status.")]
-    public async Task<string> GetReservation(int reservationId)
+
+    [McpServerTool, Description("Looks up one reservation via the PMS Reservation API and returns its real details. Requires BOTH the reservation ID and the guest name used when booking. Ask the user for both if missing.")]
+    public async Task<string> GetReservation(int reservationId, string guestName)
     {
-        var res = await Pms.GetAsync($"/api/pms/reservations");
-        if (!res.IsSuccessStatusCode) return "Could not look up reservations right now.";
-        var list = await res.Content.ReadFromJsonAsync<List<ReservationView>>();
-        var found = list?.FirstOrDefault(r => r.id == reservationId);
-        if (found is null) return $"No reservation found with ID {reservationId}.";
-        return $"Reservation ID {found.id}: Room {found.room?.roomNumber}, {found.guestName}, " +
+        var res = await Pms.GetAsync(
+            $"/api/pms/reservations/{reservationId}?guestName={Uri.EscapeDataString(guestName)}");
+
+        if (res.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return "No reservation found matching that ID and guest name.";
+        if (!res.IsSuccessStatusCode)
+            return "Could not look up the reservation right now.";
+
+        var found = await res.Content.ReadFromJsonAsync<ReservationView>();
+        return $"Reservation ID {found!.id}: Room {found.roomNumber}, {found.guestName}, " +
                $"{found.checkIn} to {found.checkOut}, total PKR {found.totalPrice:N0}.";
     }
 
-    private record ReservationView(int id, string guestName, string checkIn, string checkOut, decimal totalPrice, RoomView? room);
-    private record RoomView(string roomNumber);
+    private record ReservationView(int id, string roomNumber, string guestName, string checkIn, string checkOut, decimal totalPrice);
 
     private record AvailabilityResponse(bool available);
     private record CreatedResponse(int id, string roomNumber, int nights, decimal totalPrice);
