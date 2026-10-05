@@ -1,0 +1,26 @@
+# ---- .NET / C# ----
+bin/
+obj/
+*.user
+.vs/
+*.suo
+
+# ---- Secrets (never commit these) ----
+appsettings.Development.json
+appsettings.*.json
+!appsettings.json
+*.pfx
+secrets.json
+
+# ---- React / Node ----
+staygenie-ui/node_modules/
+staygenie-ui/dist/
+staygenie-ui/.env
+staygenie-ui/.env.local
+
+# ---- OS files ----
+.DS_Store
+Thumbs.db
+
+# ---- Logs ----
+*.log
