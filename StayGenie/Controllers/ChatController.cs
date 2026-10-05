@@ -33,7 +33,7 @@ public class ChatController(IChatClient chat, ChatTools tools, McpToolProvider m
                 - If CreateReservation or CheckAvailability says the room is not available,
                   tell the user and call SearchRooms again to suggest alternatives.
                 - Use the roomId from search results (not the room number) when calling tools.
-                - If the user asks whether a booking or reservation exists or its status, ALWAYS call GetReservation. Never guess from the conversation.
+                - If the user asks whether a booking or reservation exists or its status, ALWAYS call GetReservation with BOTH the reservation ID and the guest name. If either one is missing, ask the user for it first. Never guess the ID or the name, and never guess from the conversation.
                 - Only call GetReservation when the user explicitly asks about a reservation, booking status, or confirmation. For greetings or small talk, just respond naturally without calling any tool.
                 """)
         };
