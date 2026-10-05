@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StayGenie.Data;
 
@@ -8,6 +9,7 @@ public class PmsController(HotelDbContext db) : ControllerBase
 {
     public record BookingRequest(int RoomId, DateOnly CheckIn, DateOnly CheckOut, int Guests, string GuestName);
 
+    // Public: chatbot (MCP tool) availability check yahin se karta hai
     [HttpGet("availability")]
     public async Task<IActionResult> Availability(int roomId, DateOnly checkIn, DateOnly checkOut)
     {
@@ -16,10 +18,13 @@ public class PmsController(HotelDbContext db) : ControllerBase
         return Ok(new { roomId, checkIn, checkOut, available = !taken });
     }
 
+    // Sirf Admin: is mein sab guests ka data hota hai
     [HttpGet("reservations")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> List() =>
         Ok(await db.Reservations.Include(r => r.Room).OrderByDescending(r => r.Id).ToListAsync());
 
+    // Public: chatbot (MCP tool) booking yahin se banata hai
     [HttpPost("reservations")]
     public async Task<IActionResult> Create(BookingRequest b)
     {
@@ -52,7 +57,9 @@ public class PmsController(HotelDbContext db) : ControllerBase
             new { res.Id, roomNumber = room.RoomNumber, nights, res.TotalPrice });
     }
 
+    // Sirf Admin: booking delete karna
     [HttpDelete("reservations/{id:int}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Cancel(int id)
     {
         var res = await db.Reservations.FindAsync(id);
