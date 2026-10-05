@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StayGenie.Data;
 using StayGenie.Services;
@@ -10,10 +11,13 @@ public class RoomsController(HotelDbContext db, RoomSearchService search) : Cont
     public record RoomDto(string RoomNumber, string Type, string Description,
         int MaxOccupancy, decimal PricePerNight, string Amenities);
 
+    // Public: rooms dekhne ke liye login zaroori nahi
     [HttpGet]
     public async Task<IActionResult> GetAll() => Ok(await db.Rooms.ToListAsync());
 
+    // Sirf Admin
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Create(RoomDto dto)
     {
         if (await db.Rooms.AnyAsync(r => r.RoomNumber == dto.RoomNumber))
@@ -34,7 +38,9 @@ public class RoomsController(HotelDbContext db, RoomSearchService search) : Cont
         return Ok(room);
     }
 
+    // Sirf Admin
     [HttpDelete("{id:int}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(int id)
     {
         var room = await db.Rooms.FindAsync(id);

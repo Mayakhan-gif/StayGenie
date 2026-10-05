@@ -1,14 +1,15 @@
 using System.ClientModel;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using OpenAI;
 using Qdrant.Client;
 using StayGenie.Data;
 using StayGenie.Services;
-using System.Text;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Groq chat client
@@ -49,6 +50,7 @@ builder.Services.AddScoped<ReservationTools>();
 builder.Services.AddMcpServer()
     .WithHttpTransport()
     .WithTools<ReservationTools>();
+
 // Authentication (JWT)
 var jwtKey = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException("Jwt:Key is not configured.");
@@ -70,8 +72,11 @@ builder.Services
         };
     });
 builder.Services.AddAuthorization();
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+// Swagger + "Authorize" button (JWT token paste karne ke liye)
 builder.Services.AddSwaggerGen(c =>
 {
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -87,6 +92,7 @@ builder.Services.AddSwaggerGen(c =>
         [new OpenApiSecuritySchemeReference("Bearer", document)] = []
     });
 });
+
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
@@ -101,8 +107,11 @@ using (var scope = app.Services.CreateScope())
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseCors();
+
+// Order zaroori hai: pehle Authentication, phir Authorization
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 app.MapMcp("/mcp");
 app.Run();
