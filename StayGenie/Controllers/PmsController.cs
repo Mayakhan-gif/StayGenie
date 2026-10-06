@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StayGenie.Data;
@@ -7,7 +8,9 @@ using StayGenie.Data;
 [Route("api/pms")]
 public class PmsController(HotelDbContext db) : ControllerBase
 {
-    public record BookingRequest(int RoomId, DateOnly CheckIn, DateOnly CheckOut, int Guests, string GuestName, int? UserId = null);
+    public record BookingRequest(
+        int RoomId, DateOnly CheckIn, DateOnly CheckOut, int Guests,
+        string GuestName, string? GuestEmail = null, int? UserId = null);
 
     // Public: chatbot (MCP tool) availability check yahin se karta hai
     [HttpGet("availability")]
@@ -39,7 +42,7 @@ public class PmsController(HotelDbContext db) : ControllerBase
             !string.Equals(res.GuestName.Trim(), guestName?.Trim(), StringComparison.OrdinalIgnoreCase))
             return NotFound();
 
-        // Sirf zaroori cheezein wapas, poora object nahi
+        // Sirf zaroori cheezein wapas, poora object nahi (email jaan bhujh kar shamil nahi)
         return Ok(new
         {
             res.Id,
@@ -64,6 +67,16 @@ public class PmsController(HotelDbContext db) : ControllerBase
         if (userId is int uid && !await db.Users.AnyAsync(u => u.Id == uid))
             return BadRequest("Unknown user.");
 
+        // Email: pehle request se, warna login user ki account email
+        var guestEmail = b.GuestEmail?.Trim();
+        if (string.IsNullOrEmpty(guestEmail) && userId is int accountId)
+            guestEmail = await db.Users
+                .Where(u => u.Id == accountId)
+                .Select(u => u.Email)
+                .FirstOrDefaultAsync();
+        if (!string.IsNullOrEmpty(guestEmail) && !new EmailAddressAttribute().IsValid(guestEmail))
+            return BadRequest("Guest email is not valid.");
+
         var room = await db.Rooms.FindAsync(b.RoomId);
         if (room is null) return NotFound("Room not found.");
         if (b.Guests < 1 || b.Guests > room.MaxOccupancy)
@@ -84,6 +97,7 @@ public class PmsController(HotelDbContext db) : ControllerBase
             CheckOut = b.CheckOut,
             Guests = b.Guests,
             GuestName = b.GuestName.Trim(),
+            GuestEmail = string.IsNullOrEmpty(guestEmail) ? null : guestEmail,
             TotalPrice = nights * room.PricePerNight,
             UserId = userId,
             Status = ReservationStatus.Confirmed // payment ke step mein PendingPayment hoga

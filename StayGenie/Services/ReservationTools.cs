@@ -18,8 +18,10 @@ public class ReservationTools(IHttpClientFactory httpFactory)
         return body!.available ? "AVAILABLE" : "NOT_AVAILABLE";
     }
 
-    [McpServerTool, Description("Creates a reservation via the PMS Reservation API. Only call after the user explicitly confirmed. Dates format: yyyy-MM-dd. Never set userId yourself; the system fills it in automatically.")]
-    public async Task<string> CreateReservation(int roomId, string checkIn, string checkOut, int guests, string guestName, int userId = 0)
+    [McpServerTool, Description("Creates a reservation via the PMS Reservation API. Only call after the user explicitly confirmed. Dates format: yyyy-MM-dd. guestEmail is the email for the confirmation message; leave it empty if the user is logged in. Never set userId yourself; the system fills it in automatically.")]
+    public async Task<string> CreateReservation(
+        int roomId, string checkIn, string checkOut, int guests, string guestName,
+        string guestEmail = "", int userId = 0)
     {
         var res = await Pms.PostAsJsonAsync("/api/pms/reservations", new
         {
@@ -28,6 +30,7 @@ public class ReservationTools(IHttpClientFactory httpFactory)
             checkOut = DateOnly.Parse(checkOut),
             guests,
             guestName,
+            guestEmail = string.IsNullOrWhiteSpace(guestEmail) ? null : guestEmail.Trim(),
             userId = userId > 0 ? userId : (int?)null
         });
 

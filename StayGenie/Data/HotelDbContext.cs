@@ -15,6 +15,7 @@ public class HotelDbContext(DbContextOptions<HotelDbContext> options) : DbContex
         b.Entity<Reservation>(r =>
         {
             r.Property(x => x.TotalPrice).HasPrecision(10, 2);
+            r.Property(x => x.GuestEmail).HasMaxLength(256);
 
             // Status database mein text ("Confirmed") ke tor par save hoga.
             // Default Confirmed isliye, ke purani bookings Confirmed ho jayein.

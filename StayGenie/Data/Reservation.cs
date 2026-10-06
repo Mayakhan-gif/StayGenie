@@ -21,6 +21,10 @@ public class Reservation
     public DateOnly CheckOut { get; set; }
     public int Guests { get; set; }
     public string GuestName { get; set; } = "";
+
+    // Confirmation/reminder email yahan jayegi. Null = purani booking ya email nahi di gayi.
+    public string? GuestEmail { get; set; }
+
     public decimal TotalPrice { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

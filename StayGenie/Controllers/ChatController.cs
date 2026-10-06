@@ -30,6 +30,11 @@ public class ChatController(IChatClient chat, ChatTools tools, McpToolProvider m
         // Login hai to token se user ki id, warna 0 (bina login)
         var userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
 
+        // Login user ki email server khud account se le leta hai, bina login se poochni parti hai
+        var emailRule = userId > 0
+            ? "- The user is logged in. Do NOT ask for an email address; the system uses their account email."
+            : "- The user is not logged in. Before showing the booking summary, ask for the guest's email address (for the confirmation email) and pass it as guestEmail when calling CreateReservation.";
+
         var messages = new List<ChatMessage>
         {
             new(ChatRole.System,
@@ -47,6 +52,7 @@ public class ChatController(IChatClient chat, ChatTools tools, McpToolProvider m
                 - Before calling CreateReservation, show a summary (room, dates, guests, guest name,
                   total price) and ask the user to confirm. Call CreateReservation ONLY after the user says yes.
                 - Never set the userId argument of CreateReservation; the system fills it in.
+                {emailRule}
                 - If CreateReservation or CheckAvailability says the room is not available,
                   tell the user and call SearchRooms again to suggest alternatives.
                 - Use the roomId from search results (not the room number) when calling tools.
