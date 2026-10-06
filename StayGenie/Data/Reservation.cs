@@ -30,6 +30,9 @@ public class Reservation
 
     public ReservationStatus Status { get; set; } = ReservationStatus.Confirmed;
 
+    // Reminder email kab gayi. Null = abhi nahi gayi. Isi se duplicate reminder rukti hai.
+    public DateTime? ReminderSentAt { get; set; }
+
     // Kis user ki booking hai. Null = purani ya bina login wali booking.
     // Jaan bhujh kar User navigation property nahi rakhi, warna API se PasswordHash bhi nikal sakta tha.
     public int? UserId { get; set; }

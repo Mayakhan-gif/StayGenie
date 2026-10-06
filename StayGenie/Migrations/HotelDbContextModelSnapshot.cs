@@ -50,6 +50,9 @@ namespace StayGenie.Migrations
                     b.Property<int>("Guests")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("ReminderSentAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("RoomId")
                         .HasColumnType("int");
 
