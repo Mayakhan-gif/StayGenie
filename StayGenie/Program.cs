@@ -1,5 +1,6 @@
 using System.ClientModel;
 using System.Text;
+using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -27,6 +28,17 @@ builder.Services.AddSingleton(chatClient);
 // SQL Server (PMS database)
 builder.Services.AddDbContext<HotelDbContext>(o =>
     o.UseSqlServer(builder.Configuration.GetConnectionString("Hotel")));
+
+// Hangfire: wohi "Hotel" connection string jo EF Core use karta hai
+builder.Services.AddHangfire(cfg => cfg
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UseSqlServerStorage(builder.Configuration.GetConnectionString("Hotel")));
+builder.Services.AddHangfireServer();
+
+// Background jobs
+builder.Services.AddScoped<ReservationCleanupJob>();
 
 // Qdrant (vector DB)
 builder.Services.AddSingleton(new QdrantClient("localhost", 6334));
@@ -114,4 +126,18 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapMcp("/mcp");
+
+// Hangfire dashboard: sirf Development mein, sirf apni machine se
+if (app.Environment.IsDevelopment())
+{
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = new[] { new Hangfire.Dashboard.LocalRequestsOnlyAuthorizationFilter() }
+    });
+}
+
+// Recurring jobs
+RecurringJob.AddOrUpdate<ReservationCleanupJob>(
+    "expire-pending-reservations", j => j.ExpirePendingAsync(), "*/5 * * * *");
+
 app.Run();
