@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import AuthPage from "./AuthPage";
 import "./App.css";
 
-const API_URL = "https://localhost:7115/api/chat";
+const API_BASE = import.meta.env.VITE_API_URL ?? "https://localhost:7115";
+const API_URL = `${API_BASE}/api/chat`;
 const STORAGE_KEY = "staygenie_conversations";
+const AUTH_KEY = "staygenie_auth";
 
 const WELCOME =
   "Welcome to StayGenie. Tell me your dates, how many guests, and what you'd like in a room, and I'll find what's free and book it for you.";
@@ -38,6 +41,19 @@ function loadConversations() {
   return [newConversation()];
 }
 
+function loadAuth() {
+  try {
+    const raw = localStorage.getItem(AUTH_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.token) return parsed;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 function groupLabel(ts) {
   const d = new Date(ts);
   const now = new Date();
@@ -55,6 +71,8 @@ export default function App() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
+  const [auth, setAuth] = useState(loadAuth); // { token, name, role } ya null
+  const [showAuth, setShowAuth] = useState(false);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -70,6 +88,17 @@ export default function App() {
 
   function updateActive(updater) {
     setConversations((prev) => prev.map((c) => (c.id === activeId ? updater(c) : c)));
+  }
+
+  function handleAuthSuccess(user) {
+    localStorage.setItem(AUTH_KEY, JSON.stringify(user));
+    setAuth(user);
+    setShowAuth(false);
+  }
+
+  function signOut() {
+    localStorage.removeItem(AUTH_KEY);
+    setAuth(null);
   }
 
   async function send(text) {
@@ -88,9 +117,12 @@ export default function App() {
     const history = [...active.messages, userMsg].map(({ role, content }) => ({ role, content }));
 
     try {
+      const headers = { "Content-Type": "application/json" };
+      if (auth?.token) headers.Authorization = `Bearer ${auth.token}`;
+
       const res = await fetch(API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ messages: history }),
       });
       if (!res.ok) throw new Error(String(res.status));
@@ -202,6 +234,18 @@ export default function App() {
         </nav>
 
         <div className="side-foot">
+          <div className="authFoot">
+            {auth ? (
+              <>
+                <p className="authUser">
+                  Signed in as <strong>{auth.name}</strong> ({auth.role})
+                </p>
+                <button onClick={signOut}>Sign out</button>
+              </>
+            ) : (
+              <button onClick={() => setShowAuth(true)}>Sign in / Register</button>
+            )}
+          </div>
           <p>Live availability checked on every booking.</p>
         </div>
       </aside>
@@ -215,8 +259,8 @@ export default function App() {
           <div className="lane">
             {fresh && (
               <div className="hero">
-               <h2>Good evening. Ready to find a room?</h2>
-<p>Tell me a few details, and I'll take it from there.</p>
+                <h2>Good evening. Ready to find a room?</h2>
+                <p>Tell me a few details, and I'll take it from there.</p>
                 <div className="suggestions">
                   {SUGGESTIONS.map((s) => (
                     <button key={s} className="suggestion" onClick={() => send(s)} disabled={loading}>
@@ -285,6 +329,10 @@ export default function App() {
           <p className="disclaimer">StayGenie checks live availability before confirming any booking.</p>
         </div>
       </main>
+
+      {showAuth && (
+        <AuthPage apiBase={API_BASE} onClose={() => setShowAuth(false)} onSuccess={handleAuthSuccess} />
+      )}
     </div>
   );
 }
