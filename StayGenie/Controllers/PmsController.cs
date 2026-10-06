@@ -1,12 +1,14 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StayGenie.Data;
+using StayGenie.Services;
 
 [ApiController]
 [Route("api/pms")]
-public class PmsController(HotelDbContext db) : ControllerBase
+public class PmsController(HotelDbContext db, IBackgroundJobClient jobs) : ControllerBase
 {
     public record BookingRequest(
         int RoomId, DateOnly CheckIn, DateOnly CheckOut, int Guests,
@@ -104,6 +106,11 @@ public class PmsController(HotelDbContext db) : ControllerBase
         };
         db.Reservations.Add(res);
         await db.SaveChangesAsync();
+
+        // Email background mein: booking ka jawab email ka intezar nahi karta
+        if (res.GuestEmail is not null)
+            jobs.Enqueue<ReservationEmailJob>(j => j.SendConfirmationAsync(res.Id));
+
         return Created($"/api/pms/reservations/{res.Id}",
             new { res.Id, roomNumber = room.RoomNumber, nights, res.TotalPrice });
     }

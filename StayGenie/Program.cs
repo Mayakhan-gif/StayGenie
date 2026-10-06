@@ -37,8 +37,13 @@ builder.Services.AddHangfire(cfg => cfg
     .UseSqlServerStorage(builder.Configuration.GetConnectionString("Hotel")));
 builder.Services.AddHangfireServer();
 
+// Email: settings "Email" section se, sender ek interface ke peeche
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+
 // Background jobs
 builder.Services.AddScoped<ReservationCleanupJob>();
+builder.Services.AddScoped<ReservationEmailJob>();
 
 // Qdrant (vector DB)
 builder.Services.AddSingleton(new QdrantClient("localhost", 6334));
