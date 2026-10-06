@@ -1,4 +1,16 @@
-﻿namespace StayGenie.Data;
+﻿using System.Text.Json.Serialization;
+
+namespace StayGenie.Data;
+
+// Booking ki halat. Values 1 se shuru hain, 0 jaan bhujh kar khali hai.
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ReservationStatus
+{
+    Confirmed = 1,
+    PendingPayment = 2,
+    Cancelled = 3,
+    Expired = 4
+}
 
 public class Reservation
 {
@@ -11,4 +23,10 @@ public class Reservation
     public string GuestName { get; set; } = "";
     public decimal TotalPrice { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public ReservationStatus Status { get; set; } = ReservationStatus.Confirmed;
+
+    // Kis user ki booking hai. Null = purani ya bina login wali booking.
+    // Jaan bhujh kar User navigation property nahi rakhi, warna API se PasswordHash bhi nikal sakta tha.
+    public int? UserId { get; set; }
 }

@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;
 using StayGenie.Services;
 
@@ -9,10 +10,25 @@ public class ChatController(IChatClient chat, ChatTools tools, McpToolProvider m
     public record ChatMsg(string Role, string Content);
     public record ChatRequest(List<ChatMsg> Messages);
 
+    // CreateReservation tool ko lapetta hai: userId hamesha token se aata hai,
+    // AI jo bhi bheje, wo overwrite ho jata hai.
+    private sealed class UserBoundTool(AIFunction inner, int userId) : DelegatingAIFunction(inner)
+    {
+        protected override ValueTask<object?> InvokeCoreAsync(
+            AIFunctionArguments arguments, CancellationToken cancellationToken)
+        {
+            arguments["userId"] = userId;
+            return base.InvokeCoreAsync(arguments, cancellationToken);
+        }
+    }
+
     [HttpPost]
     public async Task<IActionResult> Post(ChatRequest req)
     {
         var today = DateTime.Today.ToString("yyyy-MM-dd");
+
+        // Login hai to token se user ki id, warna 0 (bina login)
+        var userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
 
         var messages = new List<ChatMessage>
         {
@@ -30,6 +46,7 @@ public class ChatController(IChatClient chat, ChatTools tools, McpToolProvider m
                 - Before booking, call CheckAvailability for the chosen room and dates.
                 - Before calling CreateReservation, show a summary (room, dates, guests, guest name,
                   total price) and ask the user to confirm. Call CreateReservation ONLY after the user says yes.
+                - Never set the userId argument of CreateReservation; the system fills it in.
                 - If CreateReservation or CheckAvailability says the room is not available,
                   tell the user and call SearchRooms again to suggest alternatives.
                 - Use the roomId from search results (not the room number) when calling tools.
@@ -44,7 +61,14 @@ public class ChatController(IChatClient chat, ChatTools tools, McpToolProvider m
         // SearchRooms seedha diya jata hai (vector DB), aur booking wale tools MCP server se mangwaye jate hain
         var mcpTools = await mcp.GetToolsAsync();
         var allTools = new List<AITool> { AIFunctionFactory.Create(tools.SearchRooms) };
-        allTools.AddRange(mcpTools);
+
+        foreach (var t in mcpTools)
+        {
+            var isCreate = t is AIFunction f
+                && f.Name.Replace("_", "").Equals("CreateReservation", StringComparison.OrdinalIgnoreCase);
+
+            allTools.Add(isCreate ? new UserBoundTool((AIFunction)t, userId) : t);
+        }
 
         var options = new ChatOptions { Tools = allTools };
 
