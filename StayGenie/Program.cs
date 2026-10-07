@@ -41,6 +41,10 @@ builder.Services.AddHangfireServer();
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 
+// Payment: Adyen ki settings "Adyen" section se, keys user-secrets se
+builder.Services.Configure<AdyenOptions>(builder.Configuration.GetSection("Adyen"));
+builder.Services.AddHttpClient<IPaymentService, AdyenPaymentService>();
+
 // Background jobs
 builder.Services.AddScoped<ReservationCleanupJob>();
 builder.Services.AddScoped<ReservationEmailJob>();
@@ -144,5 +148,9 @@ if (app.Environment.IsDevelopment())
 // Recurring jobs
 RecurringJob.AddOrUpdate<ReservationCleanupJob>(
     "expire-pending-reservations", j => j.ExpirePendingAsync(), "*/5 * * * *");
+
+// Roz subah 9 baje Pakistan time (Hangfire UTC use karta hai, UTC+5 ke hisaab se 04:00 UTC)
+RecurringJob.AddOrUpdate<ReservationEmailJob>(
+    "send-checkin-reminders", j => j.SendRemindersAsync(), "0 4 * * *");
 
 app.Run();

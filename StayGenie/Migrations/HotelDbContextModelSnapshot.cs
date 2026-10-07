@@ -50,6 +50,17 @@ namespace StayGenie.Migrations
                     b.Property<int>("Guests")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PaymentLinkId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PspReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<DateTime?>("ReminderSentAt")
                         .HasColumnType("datetime2");
 

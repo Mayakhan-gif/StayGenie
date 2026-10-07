@@ -1,5 +1,4 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +7,10 @@ using StayGenie.Services;
 
 [ApiController]
 [Route("api/pms")]
-public class PmsController(HotelDbContext db, IBackgroundJobClient jobs) : ControllerBase
+public class PmsController(
+    HotelDbContext db,
+    IPaymentService payments,
+    ILogger<PmsController> logger) : ControllerBase
 {
     public record BookingRequest(
         int RoomId, DateOnly CheckIn, DateOnly CheckOut, int Guests,
@@ -44,7 +46,7 @@ public class PmsController(HotelDbContext db, IBackgroundJobClient jobs) : Contr
             !string.Equals(res.GuestName.Trim(), guestName?.Trim(), StringComparison.OrdinalIgnoreCase))
             return NotFound();
 
-        // Sirf zaroori cheezein wapas, poora object nahi (email jaan bhujh kar shamil nahi)
+        // Sirf zaroori cheezein wapas (email aur payment ids jaan bhujh kar shamil nahi)
         return Ok(new
         {
             res.Id,
@@ -52,7 +54,8 @@ public class PmsController(HotelDbContext db, IBackgroundJobClient jobs) : Contr
             res.GuestName,
             res.CheckIn,
             res.CheckOut,
-            res.TotalPrice
+            res.TotalPrice,
+            status = res.Status.ToString()
         });
     }
 
@@ -102,17 +105,37 @@ public class PmsController(HotelDbContext db, IBackgroundJobClient jobs) : Contr
             GuestEmail = string.IsNullOrEmpty(guestEmail) ? null : guestEmail,
             TotalPrice = nights * room.PricePerNight,
             UserId = userId,
-            Status = ReservationStatus.Confirmed // payment ke step mein PendingPayment hoga
+            // Payment hone tak room hold hai, confirm sirf Adyen webhook karega
+            Status = ReservationStatus.PendingPayment
         };
         db.Reservations.Add(res);
         await db.SaveChangesAsync();
 
-        // Email background mein: booking ka jawab email ka intezar nahi karta
-        if (res.GuestEmail is not null)
-            jobs.Enqueue<ReservationEmailJob>(j => j.SendConfirmationAsync(res.Id));
+        try
+        {
+            var link = await payments.CreatePaymentLinkAsync(res, room.RoomNumber, nights);
+            res.PaymentLinkId = link.LinkId;
+            await db.SaveChangesAsync();
 
-        return Created($"/api/pms/reservations/{res.Id}",
-            new { res.Id, roomNumber = room.RoomNumber, nights, res.TotalPrice });
+            return Created($"/api/pms/reservations/{res.Id}", new
+            {
+                res.Id,
+                roomNumber = room.RoomNumber,
+                nights,
+                res.TotalPrice,
+                status = res.Status.ToString(),
+                paymentUrl = link.Url,
+                holdMinutes = link.HoldMinutes
+            });
+        }
+        catch (Exception ex)
+        {
+            // Payment shuru na ho saki: room ko hold mein na rakho
+            logger.LogError(ex, "Could not start payment for reservation {ReservationId}.", res.Id);
+            res.Status = ReservationStatus.Cancelled;
+            await db.SaveChangesAsync();
+            return StatusCode(502, "Could not start the payment. Please try again.");
+        }
     }
 
     // Sirf Admin: booking delete karna

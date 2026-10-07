@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace StayGenie.Data;
 
@@ -29,6 +30,17 @@ public class Reservation
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ReservationStatus Status { get; set; } = ReservationStatus.Confirmed;
+
+    // Adyen payment link ki id (PL...). Null = purani booking ya payment shuru nahi hui.
+    [MaxLength(100)]
+    public string? PaymentLinkId { get; set; }
+
+    // Adyen ka payment reference. Webhook se aata hai, refund/support ke kaam aata hai.
+    [MaxLength(100)]
+    public string? PspReference { get; set; }
+
+    // Payment kab hui. Null = abhi nahi hui.
+    public DateTime? PaidAt { get; set; }
 
     // Reminder email kab gayi. Null = abhi nahi gayi. Isi se duplicate reminder rukti hai.
     public DateTime? ReminderSentAt { get; set; }

@@ -53,6 +53,10 @@ public class ChatController(IChatClient chat, ChatTools tools, McpToolProvider m
                   total price) and ask the user to confirm. Call CreateReservation ONLY after the user says yes.
                 - Never set the userId argument of CreateReservation; the system fills it in.
                 {emailRule}
+                - CreateReservation does NOT confirm the booking. It returns PENDING_PAYMENT and a payment link.
+                  Give the user the payment link exactly as returned, with the reservation ID, and say the room is
+                  held for the stated minutes and the booking is confirmed only after payment.
+                  NEVER say the booking is confirmed or booked until a lookup shows status Confirmed.
                 - If CreateReservation or CheckAvailability says the room is not available,
                   tell the user and call SearchRooms again to suggest alternatives.
                 - Use the roomId from search results (not the room number) when calling tools.
