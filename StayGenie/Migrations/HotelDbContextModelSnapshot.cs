@@ -87,7 +87,7 @@ namespace StayGenie.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Reservations");
+                    b.ToTable("Reservations", (string)null);
                 });
 
             modelBuilder.Entity("StayGenie.Data.Room", b =>
@@ -123,7 +123,7 @@ namespace StayGenie.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Rooms");
+                    b.ToTable("Rooms", (string)null);
                 });
 
             modelBuilder.Entity("StayGenie.Data.User", b =>
@@ -157,7 +157,7 @@ namespace StayGenie.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("StayGenie.Data.Reservation", b =>
