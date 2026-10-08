@@ -11,7 +11,7 @@ public class RoomSearchService(HotelDbContext db, QdrantClient qdrant)
     private const string Collection = "rooms";
     private static readonly LocalEmbedder Embedder = new();
 
-    // SQL Server ke rooms ko Qdrant mein daalta hai
+    // SQL Server ke active rooms ko Qdrant mein daalta hai
     public async Task IndexRoomsAsync()
     {
         var collections = await qdrant.ListCollectionsAsync();
@@ -21,10 +21,17 @@ public class RoomSearchService(HotelDbContext db, QdrantClient qdrant)
         await qdrant.CreateCollectionAsync(Collection,
             new VectorParams { Size = 384, Distance = Distance.Cosine });
 
-        var rooms = await db.Rooms.ToListAsync();
+        // Sirf active rooms jo active hotels ke hain
+        var rooms = await db.Rooms
+            .Include(r => r.Hotel)
+            .Where(r => r.IsActive && r.Hotel!.IsActive)
+            .ToListAsync();
+
         var points = rooms.Select(r =>
         {
-            var text = $"{r.Type} room. {r.Description} Amenities: {r.Amenities}";
+            var hotelName = r.Hotel!.Name;
+            var city = r.Hotel.City;
+            var text = $"{r.Type} room at {hotelName} in {city}. {r.Description} Amenities: {r.Amenities}";
             var vector = Embedder.Embed(text).Values.ToArray();
             return new PointStruct
             {
@@ -38,7 +45,9 @@ public class RoomSearchService(HotelDbContext db, QdrantClient qdrant)
                     ["maxOccupancy"] = r.MaxOccupancy,
                     ["price"] = (double)r.PricePerNight,
                     ["amenities"] = r.Amenities,
-                    ["description"] = r.Description
+                    ["description"] = r.Description,
+                    ["hotelName"] = hotelName,
+                    ["city"] = city
                 }
             };
         }).ToList();
@@ -82,9 +91,13 @@ public class RoomSearchService(HotelDbContext db, QdrantClient qdrant)
             h.Payload["description"].StringValue,
             h.Payload["amenities"].StringValue,
             (int)h.Payload["maxOccupancy"].IntegerValue,
-            (decimal)h.Payload["price"].DoubleValue)).ToList();
+            (decimal)h.Payload["price"].DoubleValue,
+            h.Payload.TryGetValue("hotelName", out var hn) ? hn.StringValue : "",
+            h.Payload.TryGetValue("city", out var ct) ? ct.StringValue : "")).ToList();
     }
 }
 
+// HotelName aur City naye hain, default "" isliye purana code toote ga nahi
 public record RoomResult(int RoomId, string RoomNumber, string Type,
-    string Description, string Amenities, int MaxOccupancy, decimal PricePerNight);
+    string Description, string Amenities, int MaxOccupancy, decimal PricePerNight,
+    string HotelName = "", string City = "");
