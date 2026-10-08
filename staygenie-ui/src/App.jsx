@@ -1,8 +1,11 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import AuthPage from "./AuthPage";
+import MyBookings from "./MyBookings";
+import AdminDashboard from "./AdminDashboard";
 import "./App.css";
+import "./Dashboard.css";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "https://localhost:7115";
 const API_URL = `${API_BASE}/api/chat`;
@@ -82,6 +85,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [auth, setAuth] = useState(loadAuth); // { token, name, role } ya null
   const [showAuth, setShowAuth] = useState(false);
+  const [view, setView] = useState("chat"); // "chat" | "bookings" | "admin"
   // Adyen payment ke baad wapas aane par (?payment=done) ek message dikhao
   const [payNotice, setPayNotice] = useState(
     () => new URLSearchParams(window.location.search).get("payment") === "done"
@@ -97,7 +101,7 @@ export default function App() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [active?.messages.length, loading, activeId]);
+  }, [active?.messages.length, loading, activeId, view]);
 
   // Address bar saaf karo, taake refresh par message dobara na aaye
   useEffect(() => {
@@ -114,10 +118,12 @@ export default function App() {
     setShowAuth(false);
   }
 
-  function signOut() {
+  // Sign out (ya token expire / 401): login hatao aur chat par wapas
+  const signOut = useCallback(() => {
     localStorage.removeItem(AUTH_KEY);
     setAuth(null);
-  }
+    setView("chat");
+  }, []);
 
   async function send(text) {
     const value = (text ?? input).trim();
@@ -169,6 +175,7 @@ export default function App() {
     setConversations((prev) => [conv, ...prev]);
     setActiveId(conv.id);
     setInput("");
+    setView("chat");
     inputRef.current?.focus();
   }
 
@@ -200,6 +207,7 @@ export default function App() {
 
   const groupOrder = ["Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older"];
   const fresh = active?.messages.length === 1;
+  const isAdmin = auth?.role === "Admin";
 
   return (
     <div className="app">
@@ -212,6 +220,32 @@ export default function App() {
           <button className="newChatBtn" onClick={startNewChat}>
             <span className="plus" aria-hidden="true">+</span> New chat
           </button>
+
+          {auth && (
+            <div className="navBtns">
+              <button
+                className={"navBtn" + (view === "chat" ? " active" : "")}
+                onClick={() => setView("chat")}
+              >
+                Chat
+              </button>
+              <button
+                className={"navBtn" + (view === "bookings" ? " active" : "")}
+                onClick={() => setView("bookings")}
+              >
+                My bookings
+              </button>
+              {isAdmin && (
+                <button
+                  className={"navBtn" + (view === "admin" ? " active" : "")}
+                  onClick={() => setView("admin")}
+                >
+                  Admin dashboard
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="search">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
@@ -236,7 +270,10 @@ export default function App() {
                   <button
                     key={c.id}
                     className={"histItem" + (c.id === activeId ? " active" : "")}
-                    onClick={() => setActiveId(c.id)}
+                    onClick={() => {
+                      setActiveId(c.id);
+                      setView("chat");
+                    }}
                   >
                     <span className="histTitle">{c.title}</span>
                     <span className="histDelete" onClick={(e) => deleteConversation(c.id, e)} title="Delete">
@@ -268,117 +305,141 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="main">
-        <header className="top">
-          <h1>{active?.title === "New chat" ? "Reservation assistant" : active?.title}</h1>
-        </header>
-
-        {payNotice && (
-          <div
-            role="status"
-            style={{
-              margin: "12px auto 0",
-              maxWidth: 720,
-              padding: "10px 14px",
-              borderRadius: 8,
-              background: "#e8f5e9",
-              color: "#1b5e20",
-              fontSize: 14,
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 12,
-            }}
-          >
-            <span>
-              Thanks for completing the payment step. If the payment went through, your booking will be
-              confirmed shortly. Ask the assistant for your booking status with your reservation ID and name.
-            </span>
-            <button
-              onClick={() => setPayNotice(false)}
-              aria-label="Dismiss"
-              style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}
-            >
-              ✕
-            </button>
+      {view === "bookings" && auth && (
+        <main className="main">
+          <header className="top">
+            <h1>My bookings</h1>
+          </header>
+          <div className="pageBody">
+            <MyBookings auth={auth} onUnauthorized={signOut} />
           </div>
-        )}
+        </main>
+      )}
 
-        <div className="stream">
-          <div className="lane">
-            {fresh && (
-              <div className="hero">
-                <h2>Good evening. Ready to find a room?</h2>
-                <p>Tell me a few details, and I'll take it from there.</p>
-                <div className="suggestions">
-                  {SUGGESTIONS.map((s) => (
-                    <button key={s} className="suggestion" onClick={() => send(s)} disabled={loading}>
-                      {s}
-                    </button>
-                  ))}
+      {view === "admin" && isAdmin && (
+        <main className="main">
+          <header className="top">
+            <h1>Admin dashboard</h1>
+          </header>
+          <div className="pageBody">
+            <AdminDashboard auth={auth} onUnauthorized={signOut} />
+          </div>
+        </main>
+      )}
+
+      {(view === "chat" || !auth || (view === "admin" && !isAdmin)) && (
+        <main className="main">
+          <header className="top">
+            <h1>{active?.title === "New chat" ? "Reservation assistant" : active?.title}</h1>
+          </header>
+
+          {payNotice && (
+            <div
+              role="status"
+              style={{
+                margin: "12px auto 0",
+                maxWidth: 720,
+                padding: "10px 14px",
+                borderRadius: 8,
+                background: "#e8f5e9",
+                color: "#1b5e20",
+                fontSize: 14,
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <span>
+                Thanks for completing the payment step. If the payment went through, your booking will be
+                confirmed shortly. Ask the assistant for your booking status with your reservation ID and name.
+              </span>
+              <button
+                onClick={() => setPayNotice(false)}
+                aria-label="Dismiss"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          <div className="stream">
+            <div className="lane">
+              {fresh && (
+                <div className="hero">
+                  <h2>Good evening. Ready to find a room?</h2>
+                  <p>Tell me a few details, and I'll take it from there.</p>
+                  <div className="suggestions">
+                    {SUGGESTIONS.map((s) => (
+                      <button key={s} className="suggestion" onClick={() => send(s)} disabled={loading}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {!fresh &&
-              active.messages.map((m, i) => (
-                <div key={i} className={"turn " + m.role}>
-                  <div className="turnInner">
-                    {m.role === "assistant" && (
-                      <span className="who asst" aria-hidden="true">✦</span>
-                    )}
-                    <div className={"content" + (m.error ? " error" : "")}>
-                      {m.role === "assistant" ? (
-                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                          {m.content}
-                        </ReactMarkdown>
-                      ) : (
-                        <p>{m.content}</p>
+              {!fresh &&
+                active.messages.map((m, i) => (
+                  <div key={i} className={"turn " + m.role}>
+                    <div className="turnInner">
+                      {m.role === "assistant" && (
+                        <span className="who asst" aria-hidden="true">✦</span>
                       )}
+                      <div className={"content" + (m.error ? " error" : "")}>
+                        {m.role === "assistant" ? (
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                            {m.content}
+                          </ReactMarkdown>
+                        ) : (
+                          <p>{m.content}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+              {loading && (
+                <div className="turn assistant">
+                  <div className="turnInner">
+                    <span className="who asst" aria-hidden="true">✦</span>
+                    <div className="content">
+                      <span className="typing" aria-label="StayGenie is typing">
+                        <i /><i /><i />
+                      </span>
                     </div>
                   </div>
                 </div>
-              ))}
-
-            {loading && (
-              <div className="turn assistant">
-                <div className="turnInner">
-                  <span className="who asst" aria-hidden="true">✦</span>
-                  <div className="content">
-                    <span className="typing" aria-label="StayGenie is typing">
-                      <i /><i /><i />
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={bottomRef} />
+              )}
+              <div ref={bottomRef} />
+            </div>
           </div>
-        </div>
 
-        <div className="composerWrap">
-          <form
-            className="composer"
-            onSubmit={(e) => {
-              e.preventDefault();
-              send();
-            }}
-          >
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Message StayGenie"
-              aria-label="Message"
-            />
-            <button type="submit" disabled={loading || !input.trim()} aria-label="Send">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          </form>
-          <p className="disclaimer">StayGenie checks live availability before confirming any booking.</p>
-        </div>
-      </main>
+          <div className="composerWrap">
+            <form
+              className="composer"
+              onSubmit={(e) => {
+                e.preventDefault();
+                send();
+              }}
+            >
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Message StayGenie"
+                aria-label="Message"
+              />
+              <button type="submit" disabled={loading || !input.trim()} aria-label="Send">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </form>
+            <p className="disclaimer">StayGenie checks live availability before confirming any booking.</p>
+          </div>
+        </main>
+      )}
 
       {showAuth && (
         <AuthPage apiBase={API_BASE} onClose={() => setShowAuth(false)} onSuccess={handleAuthSuccess} />

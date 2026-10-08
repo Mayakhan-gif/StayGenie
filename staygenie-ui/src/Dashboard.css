@@ -1,0 +1,85 @@
+/* Sidebar ke pages ke buttons */
+.navBtns {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+.navBtn {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+}
+.navBtn.active,
+.navBtn:hover {
+  border-color: currentColor;
+}
+
+/* Dashboard pages */
+.pageBody {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  color: #1a1a1a;
+}
+.dash { max-width: 1000px; margin: 0 auto; }
+.dashH2 { margin: 24px 0 12px; font-size: 20px; }
+.dashMuted { color: #666; font-size: 14px; margin: 4px 0; }
+.dashError { padding: 10px 12px; background: #fdecea; color: #b3261e; border-radius: 8px; }
+.dashNotice { padding: 10px 12px; background: #e8f5e9; color: #1b5e20; border-radius: 8px; }
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.statCard {
+  background: #f6f6f9;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.statValue { font-size: 22px; font-weight: 700; }
+.statLabel { font-size: 13px; color: #666; }
+
+.cardList { display: flex; flex-direction: column; gap: 12px; }
+.bookCard { border: 1px solid #e2e2ea; border-radius: 10px; padding: 14px; }
+.bookTop { display: flex; justify-content: space-between; gap: 8px; }
+.bookActions { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+.bookActions button,
+.tableWrap button {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #6c5ce7;
+  background: #fff;
+  color: #6c5ce7;
+  cursor: pointer;
+}
+.bookActions button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.reviewForm { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.reviewForm label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
+.reviewForm select,
+.reviewForm textarea { padding: 8px; border: 1px solid #ccc; border-radius: 8px; font: inherit; }
+
+.badge { padding: 2px 10px; border-radius: 999px; font-size: 12px; background: #eee; }
+.badge-Confirmed { background: #e8f5e9; color: #1b5e20; }
+.badge-PendingPayment { background: #fff4e0; color: #8a5a00; }
+.badge-Cancelled, .badge-Expired { background: #fdecea; color: #b3261e; }
+
+.tabs { display: flex; gap: 8px; margin: 20px 0 10px; }
+.tab { padding: 6px 14px; border-radius: 8px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+.tab.active { background: #6c5ce7; color: #fff; border-color: #6c5ce7; }
+
+.tableWrap { overflow-x: auto; }
+.tableWrap table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tableWrap th, .tableWrap td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; }
+.tableWrap th { background: #f6f6f9; }
