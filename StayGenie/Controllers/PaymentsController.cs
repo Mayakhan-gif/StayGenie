@@ -1,5 +1,4 @@
-﻿using System.Linq;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Hangfire;
@@ -48,9 +47,7 @@ public class PaymentsController(
                 // Pehle signature: galat ho to Adyen se nahi aaya, kuch bhi mat chhuo
                 if (!IsValidSignature(n, o.HmacKey))
                 {
-                    var k = o.HmacKey.Trim();
-                    logger.LogWarning("Adyen webhook signature check failed. DEBUG keyLength={Len}, validHex={Hex}",
-                        k.Length, k.All(Uri.IsHexDigit));
+                    logger.LogWarning("Adyen webhook signature check failed.");
                     return Unauthorized();
                 }
 
