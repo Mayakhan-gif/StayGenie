@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import AuthPage from "./AuthPage";
 import "./App.css";
 
-const API_URL = "https://localhost:7115/api/chat";
+const API_BASE = import.meta.env.VITE_API_URL ?? "https://localhost:7115";
+const API_URL = `${API_BASE}/api/chat`;
 const STORAGE_KEY = "staygenie_conversations";
+const AUTH_KEY = "staygenie_auth";
 
 const WELCOME =
   "Welcome to StayGenie. Tell me your dates, how many guests, and what you'd like in a room, and I'll find what's free and book it for you.";
@@ -15,6 +18,15 @@ const SUGGESTIONS = [
   "Cheapest room for 2 next weekend",
   "Luxury suite with jacuzzi",
 ];
+
+// Chat ke links (jaise payment link) nayi tab mein khulein, taake chat band na ho
+const markdownComponents = {
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+};
 
 function newConversation() {
   return {
@@ -38,6 +50,19 @@ function loadConversations() {
   return [newConversation()];
 }
 
+function loadAuth() {
+  try {
+    const raw = localStorage.getItem(AUTH_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.token) return parsed;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 function groupLabel(ts) {
   const d = new Date(ts);
   const now = new Date();
@@ -55,6 +80,12 @@ export default function App() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
+  const [auth, setAuth] = useState(loadAuth); // { token, name, role } ya null
+  const [showAuth, setShowAuth] = useState(false);
+  // Adyen payment ke baad wapas aane par (?payment=done) ek message dikhao
+  const [payNotice, setPayNotice] = useState(
+    () => new URLSearchParams(window.location.search).get("payment") === "done"
+  );
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -68,8 +99,24 @@ export default function App() {
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [active?.messages.length, loading, activeId]);
 
+  // Address bar saaf karo, taake refresh par message dobara na aaye
+  useEffect(() => {
+    if (payNotice) window.history.replaceState({}, "", window.location.pathname);
+  }, [payNotice]);
+
   function updateActive(updater) {
     setConversations((prev) => prev.map((c) => (c.id === activeId ? updater(c) : c)));
+  }
+
+  function handleAuthSuccess(user) {
+    localStorage.setItem(AUTH_KEY, JSON.stringify(user));
+    setAuth(user);
+    setShowAuth(false);
+  }
+
+  function signOut() {
+    localStorage.removeItem(AUTH_KEY);
+    setAuth(null);
   }
 
   async function send(text) {
@@ -88,9 +135,12 @@ export default function App() {
     const history = [...active.messages, userMsg].map(({ role, content }) => ({ role, content }));
 
     try {
+      const headers = { "Content-Type": "application/json" };
+      if (auth?.token) headers.Authorization = `Bearer ${auth.token}`;
+
       const res = await fetch(API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ messages: history }),
       });
       if (!res.ok) throw new Error(String(res.status));
@@ -202,6 +252,18 @@ export default function App() {
         </nav>
 
         <div className="side-foot">
+          <div className="authFoot">
+            {auth ? (
+              <>
+                <p className="authUser">
+                  Signed in as <strong>{auth.name}</strong> ({auth.role})
+                </p>
+                <button onClick={signOut}>Sign out</button>
+              </>
+            ) : (
+              <button onClick={() => setShowAuth(true)}>Sign in / Register</button>
+            )}
+          </div>
           <p>Live availability checked on every booking.</p>
         </div>
       </aside>
@@ -211,12 +273,42 @@ export default function App() {
           <h1>{active?.title === "New chat" ? "Reservation assistant" : active?.title}</h1>
         </header>
 
+        {payNotice && (
+          <div
+            role="status"
+            style={{
+              margin: "12px auto 0",
+              maxWidth: 720,
+              padding: "10px 14px",
+              borderRadius: 8,
+              background: "#e8f5e9",
+              color: "#1b5e20",
+              fontSize: 14,
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <span>
+              Thanks for completing the payment step. If the payment went through, your booking will be
+              confirmed shortly. Ask the assistant for your booking status with your reservation ID and name.
+            </span>
+            <button
+              onClick={() => setPayNotice(false)}
+              aria-label="Dismiss"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <div className="stream">
           <div className="lane">
             {fresh && (
               <div className="hero">
-               <h2>Good evening. Ready to find a room?</h2>
-<p>Tell me a few details, and I'll take it from there.</p>
+                <h2>Good evening. Ready to find a room?</h2>
+                <p>Tell me a few details, and I'll take it from there.</p>
                 <div className="suggestions">
                   {SUGGESTIONS.map((s) => (
                     <button key={s} className="suggestion" onClick={() => send(s)} disabled={loading}>
@@ -236,7 +328,9 @@ export default function App() {
                     )}
                     <div className={"content" + (m.error ? " error" : "")}>
                       {m.role === "assistant" ? (
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                          {m.content}
+                        </ReactMarkdown>
                       ) : (
                         <p>{m.content}</p>
                       )}
@@ -285,6 +379,10 @@ export default function App() {
           <p className="disclaimer">StayGenie checks live availability before confirming any booking.</p>
         </div>
       </main>
+
+      {showAuth && (
+        <AuthPage apiBase={API_BASE} onClose={() => setShowAuth(false)} onSuccess={handleAuthSuccess} />
+      )}
     </div>
   );
 }

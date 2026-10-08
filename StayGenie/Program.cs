@@ -1,6 +1,11 @@
 using System.ClientModel;
+using System.Text;
+using Hangfire;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using OpenAI;
 using Qdrant.Client;
 using StayGenie.Data;
@@ -23,6 +28,26 @@ builder.Services.AddSingleton(chatClient);
 // SQL Server (PMS database)
 builder.Services.AddDbContext<HotelDbContext>(o =>
     o.UseSqlServer(builder.Configuration.GetConnectionString("Hotel")));
+
+// Hangfire: wohi "Hotel" connection string jo EF Core use karta hai
+builder.Services.AddHangfire(cfg => cfg
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UseSqlServerStorage(builder.Configuration.GetConnectionString("Hotel")));
+builder.Services.AddHangfireServer();
+
+// Email: settings "Email" section se, sender ek interface ke peeche
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+
+// Payment: Adyen ki settings "Adyen" section se, keys user-secrets se
+builder.Services.Configure<AdyenOptions>(builder.Configuration.GetSection("Adyen"));
+builder.Services.AddHttpClient<IPaymentService, AdyenPaymentService>();
+
+// Background jobs
+builder.Services.AddScoped<ReservationCleanupJob>();
+builder.Services.AddScoped<ReservationEmailJob>();
 
 // Qdrant (vector DB)
 builder.Services.AddSingleton(new QdrantClient("localhost", 6334));
@@ -47,9 +72,48 @@ builder.Services.AddMcpServer()
     .WithHttpTransport()
     .WithTools<ReservationTools>();
 
+// Authentication (JWT)
+var jwtKey = builder.Configuration["Jwt:Key"]
+    ?? throw new InvalidOperationException("Jwt:Key is not configured.");
+
+builder.Services.AddSingleton<JwtTokenService>();
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = "StayGenie",
+            ValidAudience = "StayGenieUsers",
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+    });
+builder.Services.AddAuthorization();
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+// Swagger + "Authorize" button (JWT token paste karne ke liye)
+builder.Services.AddSwaggerGen(c =>
+{
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "Login ke baad mila hua token yahan paste karo"
+    });
+
+    c.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("Bearer", document)] = []
+    });
+});
+
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
@@ -64,6 +128,29 @@ using (var scope = app.Services.CreateScope())
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseCors();
+
+// Order zaroori hai: pehle Authentication, phir Authorization
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapControllers();
 app.MapMcp("/mcp");
+
+// Hangfire dashboard: sirf Development mein, sirf apni machine se
+if (app.Environment.IsDevelopment())
+{
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = new[] { new Hangfire.Dashboard.LocalRequestsOnlyAuthorizationFilter() }
+    });
+}
+
+// Recurring jobs
+RecurringJob.AddOrUpdate<ReservationCleanupJob>(
+    "expire-pending-reservations", j => j.ExpirePendingAsync(), "*/5 * * * *");
+
+// Roz subah 9 baje Pakistan time (Hangfire UTC use karta hai, UTC+5 ke hisaab se 04:00 UTC)
+RecurringJob.AddOrUpdate<ReservationEmailJob>(
+    "send-checkin-reminders", j => j.SendRemindersAsync(), "0 4 * * *");
+
 app.Run();

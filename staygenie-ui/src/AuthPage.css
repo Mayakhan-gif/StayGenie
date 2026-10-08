@@ -1,0 +1,141 @@
+.authOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.authCard {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  background: #ffffff;
+  color: #1a1a1a;
+  border-radius: 14px;
+  padding: 28px 26px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+}
+
+.authCard h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+
+.authSub {
+  margin: 0 0 18px;
+  color: #666;
+  font-size: 14px;
+}
+
+.authClose {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: #888;
+}
+
+.authCard form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.authCard label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.authCard input {
+  padding: 10px 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 15px;
+  background: #fff;
+  color: #1a1a1a;
+}
+
+.authCard input:focus {
+  outline: 2px solid #6c5ce7;
+  border-color: transparent;
+}
+
+.authHint {
+  color: #888;
+  font-size: 12px;
+}
+
+.authError {
+  margin: 0;
+  padding: 9px 11px;
+  background: #fdecea;
+  color: #b3261e;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.authSubmit {
+  margin-top: 4px;
+  padding: 11px;
+  background: #6c5ce7;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.authSubmit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.authSwitch {
+  margin: 16px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: #666;
+}
+
+.authSwitch button {
+  background: none;
+  border: none;
+  color: #6c5ce7;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Sidebar ke neeche Sign in / Sign out */
+.authFoot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.authFoot .authUser {
+  margin: 0;
+  font-size: 13px;
+}
+
+.authFoot button {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+}
