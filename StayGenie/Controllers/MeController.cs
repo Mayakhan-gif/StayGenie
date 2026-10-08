@@ -3,19 +3,19 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StayGenie.Data;
+using StayGenie.Services;
 
 [ApiController]
 [Route("api/me")]
 [Authorize] // Sirf login wale. Admin ya Customer, dono apni hi bookings dekhte hain.
-public class MeController(HotelDbContext db) : ControllerBase
+public class MeController(HotelDbContext db, ILogger<MeController> logger) : ControllerBase
 {
     // Token se user ki id. Dusre ki id kabhi request se nahi li jati.
     private bool TryGetUserId(out int userId) =>
         int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
 
     private static bool CanCancel(Reservation r) =>
-        (r.Status == ReservationStatus.Confirmed || r.Status == ReservationStatus.PendingPayment)
-        && r.CheckIn > DateOnly.FromDateTime(DateTime.Today);
+        BookingRules.CanCancel(r.Status, r.CheckIn, BookingRules.Today());
 
     private static object ToView(Reservation r) => new
     {
@@ -70,10 +70,13 @@ public class MeController(HotelDbContext db) : ControllerBase
         if (res is null) return NotFound();
 
         if (!CanCancel(res))
-            return Conflict("This booking can no longer be cancelled.");
+            return Conflict("This booking can no longer be cancelled (cancellation closes the day before check-in).");
 
         res.Status = ReservationStatus.Cancelled;
         await db.SaveChangesAsync();
+
+        if (res.PaidAt is not null)
+            logger.LogWarning("Paid reservation {ReservationId} was cancelled by the guest. Refund needed.", res.Id);
 
         return Ok(ToView(res));
     }
