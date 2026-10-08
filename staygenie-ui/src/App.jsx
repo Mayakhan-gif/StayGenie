@@ -19,6 +19,15 @@ const SUGGESTIONS = [
   "Luxury suite with jacuzzi",
 ];
 
+// Chat ke links (jaise payment link) nayi tab mein khulein, taake chat band na ho
+const markdownComponents = {
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+};
+
 function newConversation() {
   return {
     id: crypto.randomUUID(),
@@ -73,6 +82,10 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [auth, setAuth] = useState(loadAuth); // { token, name, role } ya null
   const [showAuth, setShowAuth] = useState(false);
+  // Adyen payment ke baad wapas aane par (?payment=done) ek message dikhao
+  const [payNotice, setPayNotice] = useState(
+    () => new URLSearchParams(window.location.search).get("payment") === "done"
+  );
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -85,6 +98,11 @@ export default function App() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [active?.messages.length, loading, activeId]);
+
+  // Address bar saaf karo, taake refresh par message dobara na aaye
+  useEffect(() => {
+    if (payNotice) window.history.replaceState({}, "", window.location.pathname);
+  }, [payNotice]);
 
   function updateActive(updater) {
     setConversations((prev) => prev.map((c) => (c.id === activeId ? updater(c) : c)));
@@ -255,6 +273,36 @@ export default function App() {
           <h1>{active?.title === "New chat" ? "Reservation assistant" : active?.title}</h1>
         </header>
 
+        {payNotice && (
+          <div
+            role="status"
+            style={{
+              margin: "12px auto 0",
+              maxWidth: 720,
+              padding: "10px 14px",
+              borderRadius: 8,
+              background: "#e8f5e9",
+              color: "#1b5e20",
+              fontSize: 14,
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <span>
+              Thanks for completing the payment step. If the payment went through, your booking will be
+              confirmed shortly. Ask the assistant for your booking status with your reservation ID and name.
+            </span>
+            <button
+              onClick={() => setPayNotice(false)}
+              aria-label="Dismiss"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <div className="stream">
           <div className="lane">
             {fresh && (
@@ -280,7 +328,9 @@ export default function App() {
                     )}
                     <div className={"content" + (m.error ? " error" : "")}>
                       {m.role === "assistant" ? (
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                          {m.content}
+                        </ReactMarkdown>
                       ) : (
                         <p>{m.content}</p>
                       )}

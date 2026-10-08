@@ -1,4 +1,4 @@
-name: Backend CI
+name: CI
 
 on:
   push:
@@ -7,7 +7,8 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
+  backend:
+    name: Backend build
     runs-on: windows-latest
 
     steps:
@@ -24,3 +25,26 @@ jobs:
 
       - name: Build backend
         run: dotnet build StayGenie/StayGenie.csproj --no-restore --configuration Release
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: staygenie-ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: staygenie-ui
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: staygenie-ui
