@@ -36,4 +36,9 @@ public static class BookingRules
     public static bool CanCancel(ReservationStatus status, DateOnly checkIn, DateOnly today) =>
         (status == ReservationStatus.Confirmed || status == ReservationStatus.PendingPayment)
         && checkIn > today;
+
+    // Review tab likh sakte hain jab booking confirmed ho, stay khatam ho chuki ho
+    // aur is booking par pehle review na diya ho
+    public static bool CanReview(ReservationStatus status, DateOnly checkOut, DateOnly today, bool alreadyReviewed) =>
+        status == ReservationStatus.Confirmed && checkOut <= today && !alreadyReviewed;
 }

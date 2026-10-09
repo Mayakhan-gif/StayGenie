@@ -1,5 +1,6 @@
 using System.ClientModel;
 using System.Text;
+using System.Threading.RateLimiting;
 using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -57,10 +58,15 @@ builder.Services.AddScoped<ChatTools>();
 // MCP client: chatbot isi se MCP server (/mcp) ke booking tools mangwata hai
 builder.Services.AddSingleton<McpToolProvider>();
 
-// HttpClient jo ReservationTools (MCP server ke andar) ko PMS Reservation API se jodta hai
+// HttpClient jo ReservationTools (MCP server ke andar) ko PMS Reservation API se jodta hai.
+// X-Internal-Key: sirf hamari apni app ye header bhej sakti hai, is se PMS ko pata chalta hai
+// ke UserId par bharosa kar sakte hain (bahar wala doosre ki UserId nahi bhej sakta).
 builder.Services.AddHttpClient("Pms", c =>
 {
     c.BaseAddress = new Uri("https://localhost:7115");
+    var internalKey = builder.Configuration["Internal:ApiKey"];
+    if (!string.IsNullOrWhiteSpace(internalKey))
+        c.DefaultRequestHeaders.Add("X-Internal-Key", internalKey);
 }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
 {
     ServerCertificateCustomValidationCallback = (msg, cert, chain, errors) => true
@@ -97,6 +103,24 @@ builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
+// Errors: ek jaisa format (ProblemDetails), aur unhandled errors ka safe jawab
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
+// Rate limit: ek IP se ek minute mein limited requests (brute force aur quota abuse se bachao)
+builder.Services.AddRateLimiter(o =>
+{
+    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    o.AddPolicy("auth", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+
+    o.AddPolicy("chat", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
+});
+
 // Swagger + "Authorize" button (JWT token paste karne ke liye)
 builder.Services.AddSwaggerGen(c =>
 {
@@ -114,10 +138,17 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// CORS: sirf frontend ke origins (appsettings mein "Cors:Origins" se, warna local Vite)
+var allowedOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
+    ?? new[] { "http://localhost:5173" };
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
-    p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+    p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
 
 var app = builder.Build();
+
+// Development mein stack trace wala page khud aata hai, baqi jagah GlobalExceptionHandler
+app.UseExceptionHandler();
+app.UseStatusCodePages();
 
 // Startup par rooms ko Qdrant mein index karo
 using (var scope = app.Services.CreateScope())
@@ -128,6 +159,7 @@ using (var scope = app.Services.CreateScope())
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseCors();
+app.UseRateLimiter();
 
 // Order zaroori hai: pehle Authentication, phir Authorization
 app.UseAuthentication();

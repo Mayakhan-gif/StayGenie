@@ -1,5 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.Data;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
@@ -12,11 +14,23 @@ using StayGenie.Services;
 public class PmsController(
     HotelDbContext db,
     IPaymentService payments,
+    IConfiguration config,
     ILogger<PmsController> logger) : ControllerBase
 {
     public record BookingRequest(
         int RoomId, DateOnly CheckIn, DateOnly CheckOut, int Guests,
         string GuestName, string? GuestEmail = null, int? UserId = null);
+
+    // Kya ye call hamari apni app (MCP tool) se aayi hai? Sirf tab UserId par bharosa karte hain.
+    private bool IsInternalCall()
+    {
+        var expected = config["Internal:ApiKey"];
+        if (string.IsNullOrWhiteSpace(expected)) return false;
+
+        var given = Request.Headers["X-Internal-Key"].ToString();
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(given), Encoding.UTF8.GetBytes(expected));
+    }
 
     // Kya is room ki koi active booking in dates se takrati hai?
     private Task<bool> IsRoomTakenAsync(int roomId, DateOnly checkIn, DateOnly checkOut) =>
@@ -94,8 +108,9 @@ public class PmsController(
         if (string.IsNullOrWhiteSpace(b.GuestName)) return BadRequest("Guest name is required.");
         if (b.GuestName.Trim().Length > 100) return BadRequest("Guest name is too long.");
 
-        // 0 ya khali userId ka matlab: bina login wali booking
-        int? userId = b.UserId is > 0 ? b.UserId : null;
+        // UserId par sirf tab bharosa jab call hamari apni app se aaye (X-Internal-Key).
+        // Bahar wala doosre ki UserId bhej kar uske naam booking nahi bana sakta.
+        int? userId = IsInternalCall() && b.UserId is > 0 ? b.UserId : null;
         if (userId is int uid && !await db.Users.AnyAsync(u => u.Id == uid))
             return BadRequest("Unknown user.");
 
