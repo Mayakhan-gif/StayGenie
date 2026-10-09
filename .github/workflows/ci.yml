@@ -8,7 +8,7 @@ on:
 
 jobs:
   backend:
-    name: Backend build
+    name: Backend build and test
     runs-on: windows-latest
 
     steps:
@@ -25,6 +25,16 @@ jobs:
 
       - name: Build backend
         run: dotnet build StayGenie/StayGenie.csproj --no-restore --configuration Release
+
+      - name: Run tests
+        run: dotnet test StayGenie.Tests/StayGenie.Tests.csproj --configuration Release --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: StayGenie.Tests/TestResults/test-results.trx
 
   frontend:
     name: Frontend build

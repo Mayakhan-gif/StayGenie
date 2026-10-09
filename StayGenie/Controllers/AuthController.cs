@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using StayGenie.Data;
 using StayGenie.Services;
@@ -8,6 +9,7 @@ namespace StayGenie.Controllers;
 
 [ApiController]
 [Route("api/auth")]
+[EnableRateLimiting("auth")] // Ek IP se ek minute mein limited login/register attempts
 public class AuthController(HotelDbContext db, JwtTokenService jwt) : ControllerBase
 {
     // DTO = sirf wo data jo client se lena hai. Validation rules yahin likhte hain.
