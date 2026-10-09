@@ -1,0 +1,49 @@
+.manageBar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.formCard {
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 10px;
+  padding: 14px;
+  margin: 12px 0;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.formGrid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.formGrid input,
+.formGrid select,
+.formGrid textarea {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.rowActions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rowActions button {
+  padding: 4px 10px;
+  font-size: 13px;
+}

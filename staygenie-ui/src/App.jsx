@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import AuthPage from "./AuthPage";
 import MyBookings from "./MyBookings";
 import AdminDashboard from "./AdminDashboard";
+import Hotels from "./Hotels";
 import "./App.css";
 import "./Dashboard.css";
 
@@ -85,7 +86,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [auth, setAuth] = useState(loadAuth); // { token, name, role } ya null
   const [showAuth, setShowAuth] = useState(false);
-  const [view, setView] = useState("chat"); // "chat" | "bookings" | "admin"
+  const [view, setView] = useState("chat"); // "chat" | "hotels" | "bookings" | "admin"
   // Adyen payment ke baad wapas aane par (?payment=done) ek message dikhao
   const [payNotice, setPayNotice] = useState(
     () => new URLSearchParams(window.location.search).get("payment") === "done"
@@ -179,6 +180,13 @@ export default function App() {
     inputRef.current?.focus();
   }
 
+  // Hotels page se: chat mein jao aur message pehle se likha hua milay
+  function askAssistant(text) {
+    setInput(text);
+    setView("chat");
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
   function deleteConversation(id, e) {
     e.stopPropagation();
     setConversations((prev) => {
@@ -209,6 +217,12 @@ export default function App() {
   const fresh = active?.messages.length === 1;
   const isAdmin = auth?.role === "Admin";
 
+  // Kaun sa page dikhana hai
+  const showHotels = view === "hotels";
+  const showBookings = view === "bookings" && !!auth;
+  const showAdmin = view === "admin" && isAdmin;
+  const showChat = !showHotels && !showBookings && !showAdmin;
+
   return (
     <div className="app">
       <aside className="side">
@@ -221,30 +235,36 @@ export default function App() {
             <span className="plus" aria-hidden="true">+</span> New chat
           </button>
 
-          {auth && (
-            <div className="navBtns">
+          <div className="navBtns">
+            <button
+              className={"navBtn" + (showChat ? " active" : "")}
+              onClick={() => setView("chat")}
+            >
+              Chat
+            </button>
+            <button
+              className={"navBtn" + (showHotels ? " active" : "")}
+              onClick={() => setView("hotels")}
+            >
+              Hotels
+            </button>
+            {auth && (
               <button
-                className={"navBtn" + (view === "chat" ? " active" : "")}
-                onClick={() => setView("chat")}
-              >
-                Chat
-              </button>
-              <button
-                className={"navBtn" + (view === "bookings" ? " active" : "")}
+                className={"navBtn" + (showBookings ? " active" : "")}
                 onClick={() => setView("bookings")}
               >
                 My bookings
               </button>
-              {isAdmin && (
-                <button
-                  className={"navBtn" + (view === "admin" ? " active" : "")}
-                  onClick={() => setView("admin")}
-                >
-                  Admin dashboard
-                </button>
-              )}
-            </div>
-          )}
+            )}
+            {isAdmin && (
+              <button
+                className={"navBtn" + (showAdmin ? " active" : "")}
+                onClick={() => setView("admin")}
+              >
+                Admin dashboard
+              </button>
+            )}
+          </div>
 
           <div className="search">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -305,7 +325,18 @@ export default function App() {
         </div>
       </aside>
 
-      {view === "bookings" && auth && (
+      {showHotels && (
+        <main className="main">
+          <header className="top">
+            <h1>Hotels</h1>
+          </header>
+          <div className="pageBody">
+            <Hotels onAskAssistant={askAssistant} />
+          </div>
+        </main>
+      )}
+
+      {showBookings && (
         <main className="main">
           <header className="top">
             <h1>My bookings</h1>
@@ -316,7 +347,7 @@ export default function App() {
         </main>
       )}
 
-      {view === "admin" && isAdmin && (
+      {showAdmin && (
         <main className="main">
           <header className="top">
             <h1>Admin dashboard</h1>
@@ -327,7 +358,7 @@ export default function App() {
         </main>
       )}
 
-      {(view === "chat" || !auth || (view === "admin" && !isAdmin)) && (
+      {showChat && (
         <main className="main">
           <header className="top">
             <h1>{active?.title === "New chat" ? "Reservation assistant" : active?.title}</h1>

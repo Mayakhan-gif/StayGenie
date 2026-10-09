@@ -2,6 +2,7 @@ import { useState } from "react";
 import "./AuthPage.css";
 
 async function readError(res) {
+  if (res.status === 429) return "Too many attempts. Please wait a minute and try again.";
   try {
     const data = await res.json();
     if (data.message) return data.message;

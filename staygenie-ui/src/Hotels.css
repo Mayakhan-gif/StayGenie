@@ -1,0 +1,40 @@
+.hotelBar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.hotelBar select {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.rating {
+  font-weight: 600;
+  color: #b7791f;
+}
+
+.roomGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.roomCard {
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.reviewItem {
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+  padding: 8px 0;
+  font-size: 14px;
+}
