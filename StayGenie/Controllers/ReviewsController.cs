@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StayGenie.Data;
+using StayGenie.Services;
 
 [ApiController]
 [Route("api/reviews")]
@@ -33,8 +34,8 @@ public class ReviewsController(HotelDbContext db) : ControllerBase
         if (res.Status != ReservationStatus.Confirmed)
             return BadRequest("Only confirmed bookings can be reviewed.");
 
-        // Stay mukammal ho chuki ho (check-out guzar chuka ho)
-        if (res.CheckOut > DateOnly.FromDateTime(DateTime.Today))
+        // Stay mukammal ho chuki ho (check-out guzar chuka ho), Pakistan time ke hisaab se
+        if (res.CheckOut > BookingRules.Today())
             return BadRequest("You can review only after your stay is completed.");
 
         if (await db.Reviews.AnyAsync(r => r.ReservationId == res.Id))
@@ -83,6 +84,30 @@ public class ReviewsController(HotelDbContext db) : ControllerBase
 
         var average = reviews.Count == 0 ? 0 : Math.Round(reviews.Average(r => r.Rating), 1);
         return Ok(new { roomId, count = reviews.Count, average, reviews });
+    }
+
+    // Public: ek hotel ke saare reviews aur average
+    [HttpGet("hotel/{hotelId:int}")]
+    public async Task<IActionResult> ForHotel(int hotelId)
+    {
+        var reviews = await (
+            from rv in db.Reviews
+            join room in db.Rooms on rv.RoomId equals room.Id
+            where room.HotelId == hotelId
+            join u in db.Users on rv.UserId equals u.Id
+            orderby rv.Id descending
+            select new
+            {
+                rv.Id,
+                rv.Rating,
+                rv.Comment,
+                rv.CreatedAt,
+                roomNumber = room.RoomNumber,
+                reviewer = u.Name
+            }).ToListAsync();
+
+        var average = reviews.Count == 0 ? 0 : Math.Round(reviews.Average(r => r.Rating), 1);
+        return Ok(new { hotelId, count = reviews.Count, average, reviews });
     }
 
     // Sirf Admin: nazebah review hatana

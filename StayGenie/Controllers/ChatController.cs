@@ -1,5 +1,6 @@
 ﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.AI;
 using StayGenie.Services;
 
@@ -23,9 +24,15 @@ public class ChatController(IChatClient chat, ChatTools tools, McpToolProvider m
     }
 
     [HttpPost]
+    [EnableRateLimiting("chat")]
     public async Task<IActionResult> Post(ChatRequest req)
     {
-        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        // Bohat lambi ya bohat zyada messages wali requests ko pehle hi rok do
+        if (req.Messages is null || req.Messages.Count == 0 || req.Messages.Count > 30
+            || req.Messages.Any(m => string.IsNullOrWhiteSpace(m.Content) || m.Content.Length > 2000))
+            return BadRequest("Invalid chat request.");
+
+        var today = BookingRules.Today().ToString("yyyy-MM-dd");
 
         // Login hai to token se user ki id, warna 0 (bina login)
         var userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;

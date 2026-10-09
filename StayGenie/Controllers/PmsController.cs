@@ -1,6 +1,10 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.Data;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using StayGenie.Data;
 using StayGenie.Services;
@@ -10,21 +14,56 @@ using StayGenie.Services;
 public class PmsController(
     HotelDbContext db,
     IPaymentService payments,
+    IConfiguration config,
     ILogger<PmsController> logger) : ControllerBase
 {
     public record BookingRequest(
         int RoomId, DateOnly CheckIn, DateOnly CheckOut, int Guests,
         string GuestName, string? GuestEmail = null, int? UserId = null);
 
-    // Public: chatbot (MCP tool) availability check yahin se karta hai
-    [HttpGet("availability")]
-    public async Task<IActionResult> Availability(int roomId, DateOnly checkIn, DateOnly checkOut)
+    // Kya ye call hamari apni app (MCP tool) se aayi hai? Sirf tab UserId par bharosa karte hain.
+    private bool IsInternalCall()
     {
-        var taken = await db.Reservations.AnyAsync(r =>
+        var expected = config["Internal:ApiKey"];
+        if (string.IsNullOrWhiteSpace(expected)) return false;
+
+        var given = Request.Headers["X-Internal-Key"].ToString();
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(given), Encoding.UTF8.GetBytes(expected));
+    }
+
+    // Kya is room ki koi active booking in dates se takrati hai?
+    private Task<bool> IsRoomTakenAsync(int roomId, DateOnly checkIn, DateOnly checkOut) =>
+        db.Reservations.AnyAsync(r =>
             r.RoomId == roomId
             && r.Status != ReservationStatus.Cancelled
             && r.Status != ReservationStatus.Expired
             && r.CheckIn < checkOut && checkIn < r.CheckOut);
+
+    // Is room par lock: ek waqt mein sirf ek booking request check+insert kar sakti hai.
+    // Lock transaction khatam hote hi khud khul jata hai.
+    private async Task<bool> TryLockRoomAsync(int roomId)
+    {
+        var result = new SqlParameter("@result", SqlDbType.Int) { Direction = ParameterDirection.Output };
+        await db.Database.ExecuteSqlRawAsync(
+            "EXEC @result = sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', " +
+            "@LockOwner = 'Transaction', @LockTimeout = 10000",
+            result, new SqlParameter("@resource", $"room-{roomId}"));
+        return result.Value is int code && code >= 0;
+    }
+
+    // Public: chatbot (MCP tool) availability check yahin se karta hai
+    [HttpGet("availability")]
+    public async Task<IActionResult> Availability(int roomId, DateOnly checkIn, DateOnly checkOut)
+    {
+        var dateError = BookingRules.ValidateDates(checkIn, checkOut, BookingRules.Today());
+        if (dateError is not null) return BadRequest(dateError);
+
+        // Deactivated room/hotel bookable nahi
+        var bookable = await db.Rooms.AnyAsync(r => r.Id == roomId && r.IsActive && r.Hotel!.IsActive);
+        if (!bookable) return Ok(new { roomId, checkIn, checkOut, available = false });
+
+        var taken = await IsRoomTakenAsync(roomId, checkIn, checkOut);
         return Ok(new { roomId, checkIn, checkOut, available = !taken });
     }
 
@@ -63,12 +102,15 @@ public class PmsController(
     [HttpPost("reservations")]
     public async Task<IActionResult> Create(BookingRequest b)
     {
-        if (b.CheckIn < DateOnly.FromDateTime(DateTime.Today)) return BadRequest("Check-in date is in the past.");
-        if (b.CheckOut <= b.CheckIn) return BadRequest("Check-out must be after check-in.");
-        if (string.IsNullOrWhiteSpace(b.GuestName)) return BadRequest("Guest name is required.");
+        var dateError = BookingRules.ValidateDates(b.CheckIn, b.CheckOut, BookingRules.Today());
+        if (dateError is not null) return BadRequest(dateError);
 
-        // 0 ya khali userId ka matlab: bina login wali booking
-        int? userId = b.UserId is > 0 ? b.UserId : null;
+        if (string.IsNullOrWhiteSpace(b.GuestName)) return BadRequest("Guest name is required.");
+        if (b.GuestName.Trim().Length > 100) return BadRequest("Guest name is too long.");
+
+        // UserId par sirf tab bharosa jab call hamari apni app se aaye (X-Internal-Key).
+        // Bahar wala doosre ki UserId bhej kar uske naam booking nahi bana sakta.
+        int? userId = IsInternalCall() && b.UserId is > 0 ? b.UserId : null;
         if (userId is int uid && !await db.Users.AnyAsync(u => u.Id == uid))
             return BadRequest("Unknown user.");
 
@@ -82,34 +124,44 @@ public class PmsController(
         if (!string.IsNullOrEmpty(guestEmail) && !new EmailAddressAttribute().IsValid(guestEmail))
             return BadRequest("Guest email is not valid.");
 
-        var room = await db.Rooms.FindAsync(b.RoomId);
-        if (room is null) return NotFound("Room not found.");
-        if (b.Guests < 1 || b.Guests > room.MaxOccupancy)
-            return BadRequest($"Room {room.RoomNumber} allows max {room.MaxOccupancy} guests.");
+        // Sirf active room, active hotel ka
+        var room = await db.Rooms
+            .FirstOrDefaultAsync(r => r.Id == b.RoomId && r.IsActive && r.Hotel!.IsActive);
+        if (room is null) return NotFound("Room not found or not available for booking.");
 
-        var taken = await db.Reservations.AnyAsync(r =>
-            r.RoomId == b.RoomId
-            && r.Status != ReservationStatus.Cancelled
-            && r.Status != ReservationStatus.Expired
-            && r.CheckIn < b.CheckOut && b.CheckIn < r.CheckOut);
-        if (taken) return Conflict("Room is no longer available for these dates.");
+        var guestError = BookingRules.ValidateGuests(b.Guests, room.MaxOccupancy, room.RoomNumber);
+        if (guestError is not null) return BadRequest(guestError);
 
-        var nights = b.CheckOut.DayNumber - b.CheckIn.DayNumber;
-        var res = new Reservation
+        var nights = BookingRules.Nights(b.CheckIn, b.CheckOut);
+        Reservation res;
+
+        // Lock + check + insert ek transaction mein: double booking nahi ho sakti.
+        // Neeche return ho jaye to transaction khud rollback ho jati hai.
+        await using (var tx = await db.Database.BeginTransactionAsync())
         {
-            RoomId = b.RoomId,
-            CheckIn = b.CheckIn,
-            CheckOut = b.CheckOut,
-            Guests = b.Guests,
-            GuestName = b.GuestName.Trim(),
-            GuestEmail = string.IsNullOrEmpty(guestEmail) ? null : guestEmail,
-            TotalPrice = nights * room.PricePerNight,
-            UserId = userId,
-            // Payment hone tak room hold hai, confirm sirf Adyen webhook karega
-            Status = ReservationStatus.PendingPayment
-        };
-        db.Reservations.Add(res);
-        await db.SaveChangesAsync();
+            if (!await TryLockRoomAsync(b.RoomId))
+                return StatusCode(503, "The system is busy. Please try again in a moment.");
+
+            if (await IsRoomTakenAsync(b.RoomId, b.CheckIn, b.CheckOut))
+                return Conflict("Room is no longer available for these dates.");
+
+            res = new Reservation
+            {
+                RoomId = b.RoomId,
+                CheckIn = b.CheckIn,
+                CheckOut = b.CheckOut,
+                Guests = b.Guests,
+                GuestName = b.GuestName.Trim(),
+                GuestEmail = string.IsNullOrEmpty(guestEmail) ? null : guestEmail,
+                TotalPrice = BookingRules.TotalPrice(room.PricePerNight, b.CheckIn, b.CheckOut),
+                UserId = userId,
+                // Payment hone tak room hold hai, confirm sirf Adyen webhook karega
+                Status = ReservationStatus.PendingPayment
+            };
+            db.Reservations.Add(res);
+            await db.SaveChangesAsync();
+            await tx.CommitAsync();
+        }
 
         try
         {
@@ -138,15 +190,23 @@ public class PmsController(
         }
     }
 
-    // Sirf Admin: booking delete karna
+    // Sirf Admin: booking cancel karna (database se delete nahi, record bacha rehta hai)
     [HttpDelete("reservations/{id:int}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Cancel(int id)
     {
         var res = await db.Reservations.FindAsync(id);
         if (res is null) return NotFound();
-        db.Reservations.Remove(res);
+
+        if (res.Status is ReservationStatus.Cancelled or ReservationStatus.Expired)
+            return NoContent();
+
+        res.Status = ReservationStatus.Cancelled;
         await db.SaveChangesAsync();
+
+        if (res.PaidAt is not null)
+            logger.LogWarning("Paid reservation {ReservationId} was cancelled by admin. Refund needed.", res.Id);
+
         return NoContent();
     }
 }

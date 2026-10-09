@@ -36,14 +36,19 @@ public class HotelsController(HotelDbContext db, RoomSearchService search) : Con
                 h.Description,
                 h.Phone,
                 h.Amenities,
-                RoomCount = db.Rooms.Count(r => r.HotelId == h.Id && r.IsActive)
+                RoomCount = db.Rooms.Count(r => r.HotelId == h.Id && r.IsActive),
+                AverageRating = db.Reviews
+                    .Where(rv => db.Rooms.Any(r => r.Id == rv.RoomId && r.HotelId == h.Id))
+                    .Average(rv => (double?)rv.Rating),
+                ReviewCount = db.Reviews
+                    .Count(rv => db.Rooms.Any(r => r.Id == rv.RoomId && r.HotelId == h.Id))
             })
             .ToListAsync();
 
         return Ok(hotels);
     }
 
-    // Public: ek hotel aur uske active rooms
+    // Public: ek hotel aur uske active rooms (har room ki rating ke saath)
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id)
     {
@@ -58,6 +63,11 @@ public class HotelsController(HotelDbContext db, RoomSearchService search) : Con
                 h.Description,
                 h.Phone,
                 h.Amenities,
+                AverageRating = db.Reviews
+                    .Where(rv => db.Rooms.Any(r => r.Id == rv.RoomId && r.HotelId == h.Id))
+                    .Average(rv => (double?)rv.Rating),
+                ReviewCount = db.Reviews
+                    .Count(rv => db.Rooms.Any(r => r.Id == rv.RoomId && r.HotelId == h.Id)),
                 Rooms = db.Rooms
                     .Where(r => r.HotelId == h.Id && r.IsActive)
                     .OrderBy(r => r.RoomNumber)
@@ -69,7 +79,10 @@ public class HotelsController(HotelDbContext db, RoomSearchService search) : Con
                         r.Description,
                         r.MaxOccupancy,
                         r.PricePerNight,
-                        r.Amenities
+                        r.Amenities,
+                        AverageRating = db.Reviews
+                            .Where(rv => rv.RoomId == r.Id)
+                            .Average(rv => (double?)rv.Rating)
                     })
                     .ToList()
             })
